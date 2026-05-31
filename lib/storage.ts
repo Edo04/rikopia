@@ -1,3 +1,10 @@
+export type Comment = {
+  id: string;
+  author: string;
+  text: string;
+  createdAt: string;
+};
+
 export type Post = {
   id: string;
   author: string;
@@ -9,6 +16,8 @@ export type Post = {
   likes: number;
   comments: number;
   reposts: number;
+  isLiked?: boolean; // いいねしたかどうかのフラグ
+  commentList?: Comment[]; // コメントのリスト
 };
 
 // 最初に表示するサンプルの投稿データ
@@ -22,8 +31,17 @@ export const INITIAL_POSTS: Post[] = [
     hasImage: true,
     createdAt: "2h",
     likes: 1200,
-    comments: 68,
+    comments: 1, // コメント数を1に変更
     reposts: 235,
+    isLiked: false,
+    commentList: [
+      {
+        id: "c1",
+        author: "Fan_01",
+        text: "It was amazing! 😭",
+        createdAt: "1h",
+      }
+    ]
   },
   {
     id: "2",
@@ -34,8 +52,10 @@ export const INITIAL_POSTS: Post[] = [
     hasImage: false,
     createdAt: "5h",
     likes: 850,
-    comments: 42,
+    comments: 0,
     reposts: 120,
+    isLiked: false,
+    commentList: []
   }
 ];
 

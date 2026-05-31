@@ -1,175 +1,329 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Post, loadPosts, savePosts } from "../lib/storage";
+import { Post, Comment, loadPosts, savePosts } from "../lib/storage";
 
 export default function Home() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [inputText, setInputText] = useState("");
+  const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
 
-  // 画面が表示された時に、保存されている投稿を読み込む
   useEffect(() => {
     const loaded = loadPosts();
     setPosts(loaded);
   }, []);
 
-  // 投稿ボタンを押した時の処理
   const handlePost = () => {
-    if (!inputText.trim()) return; // 空なら何もしない
-
+    if (!inputText.trim()) return;
     const newPost: Post = {
       id: Date.now().toString(),
-      author: "HanniBear ✨", // あなたの名前（モック）
-      handle: "@hanni_bear",
+      author: "HanniBear",
+      handle: "hanni_bear",
       avatarChar: "H",
       text: inputText,
       hasImage: false,
-      createdAt: "Just now",
+      createdAt: "1分前",
       likes: 0,
       comments: 0,
       reposts: 0,
+      isLiked: false,
+      commentList: [],
     };
-
     const newPosts = [newPost, ...posts];
     setPosts(newPosts);
-    savePosts(newPosts); // localStorageに保存
-    setInputText(""); // 入力欄を空にする
+    savePosts(newPosts);
+    setInputText("");
+  };
+
+  const toggleLike = (postId: string) => {
+    const updatedPosts = posts.map(post => {
+      if (post.id === postId) {
+        const currentlyLiked = post.isLiked;
+        return {
+          ...post,
+          isLiked: !currentlyLiked,
+          likes: currentlyLiked ? post.likes - 1 : post.likes + 1
+        };
+      }
+      return post;
+    });
+    setPosts(updatedPosts);
+    savePosts(updatedPosts);
+  };
+
+  const handleCommentChange = (postId: string, text: string) => {
+    setCommentInputs({ ...commentInputs, [postId]: text });
+  };
+
+  const handleAddComment = (postId: string) => {
+    const text = commentInputs[postId];
+    if (!text || !text.trim()) return;
+
+    const newComment: Comment = {
+      id: Date.now().toString(),
+      author: "HanniBear",
+      text: text,
+      createdAt: "たった今",
+    };
+
+    const updatedPosts = posts.map(post => {
+      if (post.id === postId) {
+        const currentComments = post.commentList || [];
+        return {
+          ...post,
+          comments: post.comments + 1,
+          commentList: [...currentComments, newComment]
+        };
+      }
+      return post;
+    });
+    setPosts(updatedPosts);
+    savePosts(updatedPosts);
+    setCommentInputs({ ...commentInputs, [postId]: "" });
   };
 
   return (
     <>
-      {/* 中央：フィードエリア */}
-      <div className="feed-area fade-in">
-        {/* 上部ヘッダー（検索とアイコン） */}
-        <div className="top-header">
-          <input 
-            type="text" 
-            className="search-bar" 
-            placeholder="Search idols, posts, users, topics..." 
-          />
-          <div className="header-icons">
-            <span>🏠</span>
-            <span>📩</span>
-            <span>🔔</span>
-            <span className="post-avatar" style={{width: 32, height: 32, fontSize: 14}}>H</span>
+      {/* --- 中央フィード --- */}
+      <main className="main-feed fade-in">
+        
+        {/* 投稿作成ボックス */}
+        <div className="create-post-card">
+          <div className="create-post-input-area">
+            <img src="/icon-mypage.png" alt="Avatar" className="post-avatar" style={{width:40, height:40}} />
+            <input 
+              type="text" 
+              placeholder="今の気持ちをシェアしよう.." 
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handlePost(); }}
+            />
           </div>
-        </div>
-
-        {/* タブメニュー */}
-        <div className="tab-menu">
-          <button className="tab-btn active">For You</button>
-          <button className="tab-btn">Following</button>
-          <button className="tab-btn">Trending</button>
-        </div>
-
-        {/* 投稿入力エリア */}
-        <div className="create-post-box">
-          <div className="post-avatar" style={{width: 40, height: 40}}>H</div>
-          <input 
-            type="text" 
-            placeholder="What's on your mind?" 
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                handlePost();
-              }
-            }}
-          />
-          <button 
-            className="post-submit-btn" 
-            onClick={handlePost}
-            disabled={!inputText.trim()}
-          >
-            Post
-          </button>
+          <div className="create-post-actions">
+            <button className="post-option-btn">
+              <span style={{fontSize: "18px"}}>🖼️</span> 画像
+            </button>
+            <button className="post-option-btn">
+              <span style={{fontSize: "18px"}}>🎬</span> 動画
+            </button>
+            <button className="post-option-btn">
+              <span style={{fontSize: "18px"}}>📊</span> 投票
+            </button>
+            <button className="post-option-btn">
+              <img src="/icon-event.jpg" alt="Event" className="custom-icon-sm" /> イベント
+            </button>
+            
+            <button 
+              className="btn-primary" 
+              style={{padding: "8px 24px", marginTop: 0, marginLeft: "auto", fontSize: "14px", borderRadius: "20px"}}
+              onClick={handlePost}
+              disabled={!inputText.trim()}
+            >
+              <img src="/icon-post.jpg" alt="Post" className="custom-icon-sm" style={{filter: "brightness(0) invert(1)"}} /> 投稿
+            </button>
+          </div>
         </div>
 
         {/* タイムライン */}
-        <div className="posts-container">
-          {posts.map((post) => (
-            <div key={post.id} className="post-card">
-              <div className="post-avatar">{post.avatarChar}</div>
-              <div className="post-content">
-                <div className="post-user-info">
-                  <span className="post-author">{post.author}</span>
-                  <span className="post-handle">{post.handle}</span>
-                  <span className="post-date">· {post.createdAt}</span>
-                </div>
-                <p className="post-text">
-                  {post.text.split('\n').map((line, i) => (
-                    <React.Fragment key={i}>
-                      {line}
-                      <br />
-                    </React.Fragment>
-                  ))}
-                </p>
-
-                {post.hasImage && (
-                  <div className="post-image">
-                    🎤 Concert Image Placeholder 📸
+        {posts.map((post) => (
+          <div key={post.id} className="post-card">
+            <div className="post-header">
+              <div className="post-user-info">
+                {post.avatarChar === "H" ? (
+                  <img src="/icon-mypage.png" alt="Avatar" className="post-avatar" />
+                ) : (
+                  <div className="post-avatar" style={{background:"var(--primary-light)", color:"var(--primary)", display:"flex", justifyContent:"center", alignItems:"center", fontSize:"20px", fontWeight:700}}>
+                    {post.avatarChar}
                   </div>
                 )}
-
-                <div className="post-actions">
-                  <button className="action-btn">
-                    💬 {post.comments}
-                  </button>
-                  <button className="action-btn">
-                    🔁 {post.reposts}
-                  </button>
-                  <button className="action-btn active">
-                    ❤️ {post.likes >= 1000 ? (post.likes / 1000).toFixed(1) + 'K' : post.likes}
-                  </button>
-                  <button className="action-btn">
-                    🔗
-                  </button>
+                <div className="post-meta">
+                  <div className="post-author-row">
+                    <span className="post-author">{post.author}</span>
+                    <span className="level-badge" style={{fontSize:"10px", padding:"2px 6px", marginRight:0}}>L3</span>
+                    <span className="post-time">{post.createdAt}</span>
+                  </div>
+                  <span className="post-time" style={{fontSize: "12px"}}>@{post.handle}</span>
                 </div>
               </div>
+              <button style={{background:"none", border:"none", cursor:"pointer", color:"var(--text-secondary)"}}>
+                <span style={{fontSize:"20px"}}>⋯</span>
+              </button>
             </div>
-          ))}
-        </div>
-      </div>
+            
+            <p className="post-text">
+              {post.text.split('\n').map((line, i) => (
+                <React.Fragment key={i}>{line}<br /></React.Fragment>
+              ))}
+            </p>
 
-      {/* 右側：サイドバーエリア */}
-      <aside className="right-sidebar fade-in">
-        <div className="sidebar-card">
-          <h2>Trending Now</h2>
-          <div className="trend-item">
-            <p className="trend-topic">1 #NOVA_COMEBACK</p>
-            <p className="trend-posts">125K posts</p>
+            {post.hasImage && (
+              <img src="/icon-event.jpg" alt="Concert" className="post-image" />
+            )}
+
+            <div className="post-actions">
+              <div className="action-group">
+                <button 
+                  className={`action-btn ${post.isLiked ? 'liked' : ''}`}
+                  onClick={() => toggleLike(post.id)}
+                >
+                  <img src="/icon-like.jpg" alt="Like" className="custom-icon-sm" />
+                  {post.likes >= 1000 ? (post.likes / 1000).toFixed(1) + 'K' : post.likes}
+                </button>
+                <button className="action-btn">
+                  <img src="/icon-comment.jpg" alt="Comment" className="custom-icon-sm" />
+                  {post.comments}
+                </button>
+                <button className="action-btn">
+                  <span style={{fontSize: "18px"}}>🔁</span>
+                  {post.reposts}
+                </button>
+              </div>
+              <button className="action-btn">
+                <img src="/icon-hozon.png" alt="Save" className="custom-icon-sm" />
+              </button>
+            </div>
+
+            {/* コメントセクション */}
+            {post.commentList && post.commentList.length > 0 && (
+              <div className="comments-section">
+                {post.commentList.map(comment => (
+                  <div key={comment.id} className="comment-item">
+                    <img src="/icon-mypage.png" alt="Avatar" className="comment-avatar" />
+                    <div className="comment-content">
+                      <span className="comment-author">{comment.author}</span>
+                      <span className="comment-text">{comment.text}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {/* コメント入力 */}
+            <div className="comment-input-area">
+              <img src="/icon-mypage.png" alt="Avatar" className="comment-avatar" style={{width: 28, height: 28}} />
+              <input 
+                type="text" 
+                placeholder="コメントを追加..." 
+                value={commentInputs[post.id] || ""}
+                onChange={(e) => handleCommentChange(post.id, e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleAddComment(post.id);
+                }}
+              />
+            </div>
           </div>
-          <div className="trend-item">
-            <p className="trend-topic">2 #NovaWorldTour</p>
-            <p className="trend-posts">98K posts</p>
+        ))}
+      </main>
+
+      {/* --- 右ユーティリティパネル --- */}
+      <aside className="right-panel fade-in">
+        
+        {/* 急上昇ハッシュタグ */}
+        <div className="panel-card">
+          <p className="panel-title">急上昇ハッシュタグ</p>
+          <div className="trend-list">
+            <div className="trend-item">
+              <div className="trend-rank-tag">
+                <span className="trend-rank">1</span>
+                <span className="trend-tag">#NOVA_ConcertBack</span>
+              </div>
+              <span className="trend-posts">12.5K posts</span>
+            </div>
+            <div className="trend-item">
+              <div className="trend-rank-tag">
+                <span className="trend-rank">2</span>
+                <span className="trend-tag">#Yuseon_Vlog</span>
+              </div>
+              <span className="trend-posts">8.2K posts</span>
+            </div>
+            <div className="trend-item">
+              <div className="trend-rank-tag">
+                <span className="trend-rank">3</span>
+                <span className="trend-tag">#NOVA_WORLD_TOUR</span>
+              </div>
+              <span className="trend-posts">6.7K posts</span>
+            </div>
+            <div className="trend-item">
+              <div className="trend-rank-tag">
+                <span className="trend-rank">4</span>
+                <span className="trend-tag">#OurStar_NOVA</span>
+              </div>
+              <span className="trend-posts">5.1K posts</span>
+            </div>
           </div>
-          <div className="trend-item">
-            <p className="trend-topic">3 #BiasBeatBday</p>
-            <p className="trend-posts">42K posts</p>
+          <a className="panel-more">もっと見る</a>
+        </div>
+
+        {/* おすすめのコミュニティ */}
+        <div className="panel-card">
+          <p className="panel-title">おすすめのコミュニティ</p>
+          <div className="community-item">
+            <div className="community-icon" style={{background: "#7C5CFF"}}>N</div>
+            <div className="community-info">
+              <p className="community-name">NOVA Official</p>
+              <p className="community-members">メンバー 128K</p>
+            </div>
           </div>
-          <div className="trend-item">
-            <p className="trend-topic">4 #StanWithLove</p>
-            <p className="trend-posts">31K posts</p>
+          <div className="community-item">
+            <div className="community-icon" style={{background: "#B2BDFF"}}>Y</div>
+            <div className="community-info">
+              <p className="community-name">Yuseon Dreamers</p>
+              <p className="community-members">メンバー 42K</p>
+            </div>
+          </div>
+          <div className="community-item">
+            <div className="community-icon" style={{background: "#FF7DCB"}}>F</div>
+            <div className="community-info">
+              <p className="community-name">NOVA Fan Art</p>
+              <p className="community-members">メンバー 35K</p>
+            </div>
+          </div>
+          <a className="panel-more">もっと見る</a>
+        </div>
+
+        {/* 今後のイベント */}
+        <div className="panel-card">
+          <p className="panel-title">今後のイベント</p>
+          <div className="event-item">
+            <img src="/icon-event.jpg" alt="Event" className="event-thumb" />
+            <div className="event-info">
+              <p className="event-title">NOVA WORLD TOUR<br/>in OSAKA</p>
+              <p className="event-date">5.18 (土) 17:00</p>
+            </div>
+          </div>
+          <div className="event-item">
+            <div className="event-thumb" style={{background: "var(--accent-pink)", display:"flex", alignItems:"center", justifyContent:"center"}}>🎂</div>
+            <div className="event-info">
+              <p className="event-title">Yuseon Birthday Project<br/>2024</p>
+              <p className="event-date">5.24 (金) 00:00</p>
+            </div>
+          </div>
+          <a className="panel-more">もっと見る</a>
+        </div>
+
+        {/* クイック統計 */}
+        <div className="panel-card">
+          <p className="panel-title">クイック統計</p>
+          <div className="stats-grid">
+            <div className="stat-box">
+              <span className="stat-label">フォロー中</span>
+              <span className="stat-value">42</span>
+            </div>
+            <div className="stat-box">
+              <span className="stat-label">投稿数</span>
+              <span className="stat-value">186</span>
+            </div>
+            <div className="stat-box">
+              <span className="stat-label">フォロワー</span>
+              <span className="stat-value">1.2K</span>
+            </div>
+            <div className="stat-box">
+              <span className="stat-label">いいね総数</span>
+              <span className="stat-value">24.8K</span>
+            </div>
           </div>
         </div>
 
-        <div className="sidebar-card">
-          <h2>Suggested Communities</h2>
-          <div className="trend-item" style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
-            <div className="post-avatar" style={{width: 32, height: 32, background: '#8b5cf6'}}>N</div>
-            <div>
-              <p className="trend-topic" style={{marginBottom: 0}}>NOVA Official</p>
-              <p className="trend-posts">128K members</p>
-            </div>
-          </div>
-          <div className="trend-item" style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
-            <div className="post-avatar" style={{width: 32, height: 32, background: '#f472b6'}}>A</div>
-            <div>
-              <p className="trend-topic" style={{marginBottom: 0}}>AURORA Dream</p>
-              <p className="trend-posts">95K members</p>
-            </div>
-          </div>
-        </div>
       </aside>
     </>
   );
