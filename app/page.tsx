@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Post, Comment, loadPosts, savePosts } from "../lib/storage";
+import { Post, Comment, loadPosts, addPost, updatePost } from "../lib/storage";
 
 export default function Home() {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -10,15 +10,23 @@ export default function Home() {
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // コメント入力用
   const [commentInputs, setCommentInputs] = useState<{ [postId: string]: string }>({});
 
   useEffect(() => {
-    setPosts(loadPosts());
+    // 画面が開いた時にSupabaseからデータを取得する
+    const fetchPosts = async () => {
+      setIsLoading(true);
+      const data = await loadPosts();
+      setPosts(data);
+      setIsLoading(false);
+    };
+    fetchPosts();
   }, []);
 
-  const handlePost = () => {
+  const handlePost = async () => {
     if (!inputText.trim() && !selectedImage && !selectedVideo) return;
     
     const newPost: Post = {
@@ -36,13 +44,16 @@ export default function Home() {
       video: selectedVideo || undefined,
     };
     
+    // 画面にすぐ表示する（楽観的UI）
     const updated = [newPost, ...posts];
     setPosts(updated);
-    savePosts(updated);
     
     setInputText("");
     setSelectedImage(null);
     setSelectedVideo(null);
+
+    // Supabaseに保存する
+    await addPost(newPost);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') => {
@@ -54,7 +65,7 @@ export default function Home() {
       const result = event.target?.result as string;
       if (type === 'image') {
         setSelectedImage(result);
-        setSelectedVideo(null); // 画像か動画どちらかのみとする
+        setSelectedVideo(null); 
       } else {
         setSelectedVideo(result);
         setSelectedImage(null);
@@ -63,27 +74,36 @@ export default function Home() {
     reader.readAsDataURL(file);
   };
 
-  const toggleLike = (id: string) => {
+  const toggleLike = async (id: string) => {
+    let targetPost: Post | undefined;
+    
     const updated = posts.map(p => {
       if (p.id === id) {
         const currentlyLiked = p.isLiked || false;
-        return {
+        const newPost = {
           ...p,
           isLiked: !currentlyLiked,
           likes: p.likes + (currentlyLiked ? -1 : 1)
         };
+        targetPost = newPost;
+        return newPost;
       }
       return p;
     });
-    setPosts(updated);
-    savePosts(updated);
+    
+    setPosts(updated); // 画面をすぐ更新
+    
+    if (targetPost) {
+      // Supabaseに更新を送信
+      await updatePost(targetPost);
+    }
   };
 
   const handleCommentChange = (postId: string, text: string) => {
     setCommentInputs({ ...commentInputs, [postId]: text });
   };
 
-  const handleAddComment = (postId: string) => {
+  const handleAddComment = async (postId: string) => {
     const text = commentInputs[postId];
     if (!text || !text.trim()) return;
 
@@ -94,24 +114,30 @@ export default function Home() {
       createdAt: "Just now"
     };
 
+    let targetPost: Post | undefined;
+
     const updated = posts.map(p => {
       if (p.id === postId) {
-        return {
+        const newPost = {
           ...p,
           commentList: [...(p.commentList || []), newComment]
         };
+        targetPost = newPost;
+        return newPost;
       }
       return p;
     });
 
-    setPosts(updated);
-    savePosts(updated);
+    setPosts(updated); // 画面をすぐ更新
     setCommentInputs({ ...commentInputs, [postId]: "" });
+
+    if (targetPost) {
+      // Supabaseに更新を送信
+      await updatePost(targetPost);
+    }
   };
 
-  // ハッシュタグを青(紫)色でレンダリングする関数
   const renderTextWithHashtags = (text: string) => {
-    // 簡易的なハッシュタグ正規表現: #に続く英数字・日本語などをマッチ
     const parts = text.split(/(#[^\s#]+)/g);
     return parts.map((part, index) => {
       if (part.startsWith('#')) {
@@ -173,8 +199,21 @@ export default function Home() {
           </div>
         </div>
 
+        {/* ロード中表示 */}
+        {isLoading && (
+          <div style={{textAlign: "center", padding: "40px", color: "var(--text-secondary)"}}>
+            データベースから読み込み中...
+          </div>
+        )}
+
         {/* 2. 投稿一覧 */}
-        {posts.map((post) => (
+        {!isLoading && posts.length === 0 && (
+          <div style={{textAlign: "center", padding: "40px", color: "var(--text-secondary)"}}>
+            まだ投稿がありません。最初の投稿をしてみましょう！
+          </div>
+        )}
+
+        {!isLoading && posts.map((post) => (
           <div key={post.id} className="post-card">
             <div className="post-header">
               <div className="post-user-info">
@@ -199,14 +238,12 @@ export default function Home() {
               {renderTextWithHashtags(post.text)}
             </p>
             
-            {/* メディア表示 */}
             {post.image && (
               <img src={post.image} alt="Post image" className="post-image" />
             )}
             {post.video && (
               <video src={post.video} controls className="post-image" style={{ background: "black" }} />
             )}
-            {/* 初期データの仮画像表示用 */}
             {!post.image && !post.video && post.hasImage && (
               <div style={{width: "100%", height: "240px", background: "var(--primary-light)", borderRadius: "12px", marginBottom: "12px", display: "flex", justifyContent: "center", alignItems: "center", color: "var(--primary)", fontWeight: 700}}>
                 NOVA
@@ -262,7 +299,6 @@ export default function Home() {
 
       {/* 右パネル */}
       <aside className="right-panel fade-in">
-        {/* 急上昇ハッシュタグ */}
         <div className="panel-card">
           <p className="panel-title">急上昇ハッシュタグ</p>
           <div className="trend-list">
@@ -284,78 +320,8 @@ export default function Home() {
                 </div>
               </div>
             </div>
-            <div className="trend-item">
-              <div className="trend-rank-tag">
-                <span className="trend-rank" style={{color: "var(--text-secondary)"}}>3</span>
-                <div style={{display: "flex", flexDirection: "column"}}>
-                  <span className="trend-tag">#NOVA_WORLD_TOUR</span>
-                  <span className="trend-posts">6.7K posts</span>
-                </div>
-              </div>
-            </div>
-            <div className="trend-item">
-              <div className="trend-rank-tag">
-                <span className="trend-rank" style={{color: "var(--text-secondary)"}}>4</span>
-                <div style={{display: "flex", flexDirection: "column"}}>
-                  <span className="trend-tag">#OurStar_NOVA</span>
-                  <span className="trend-posts">5.1K posts</span>
-                </div>
-              </div>
-            </div>
           </div>
           <a className="panel-more">もっと見る</a>
-        </div>
-
-        {/* おすすめのコミュニティ */}
-        <div className="panel-card">
-          <p className="panel-title">おすすめのコミュニティ</p>
-          <div className="community-item">
-            <div className="community-icon" style={{background: "var(--primary)"}}>N</div>
-            <div className="community-info">
-              <p className="community-name">NOVA Official</p>
-              <p className="community-members">メンバー 128K</p>
-            </div>
-            <button className="btn-secondary" style={{padding: "4px 12px", fontSize: "12px"}}>＋ 参加</button>
-          </div>
-          <div className="community-item">
-            <div className="community-icon" style={{background: "var(--primary-light)"}}>Y</div>
-            <div className="community-info">
-              <p className="community-name">Yuseon Dreamers</p>
-              <p className="community-members">メンバー 42K</p>
-            </div>
-            <button className="btn-secondary" style={{padding: "4px 12px", fontSize: "12px"}}>＋ 参加</button>
-          </div>
-          <div className="community-item">
-            <div className="community-icon" style={{background: "var(--accent-pink)"}}>F</div>
-            <div className="community-info">
-              <p className="community-name">NOVA Fan Art</p>
-              <p className="community-members">メンバー 35K</p>
-            </div>
-            <button className="btn-secondary" style={{padding: "4px 12px", fontSize: "12px"}}>＋ 参加</button>
-          </div>
-          <a className="panel-more">もっと見る</a>
-        </div>
-
-        {/* 今後のイベント */}
-        <div className="panel-card">
-          <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px"}}>
-            <p className="panel-title" style={{marginBottom: 0}}>今後のイベント</p>
-            <a className="panel-more" style={{marginTop: 0}}>すべて見る</a>
-          </div>
-          <div className="event-item">
-            <img src="/icon-event.jpg" alt="Event" className="event-thumb" />
-            <div className="event-info">
-              <p className="event-title">NOVA WORLD TOUR 日本公演 (東京ドーム)</p>
-              <p className="event-date">2025.06.01 (Sat) 18:00</p>
-            </div>
-          </div>
-          <div className="event-item">
-            <div className="event-thumb" style={{background: "var(--accent-pink)"}}></div>
-            <div className="event-info">
-              <p className="event-title">4th Anniversary Live Streaming</p>
-              <p className="event-date">2025.07.15 (Tue) 20:00</p>
-            </div>
-          </div>
         </div>
       </aside>
     </>

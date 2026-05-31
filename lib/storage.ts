@@ -1,3 +1,5 @@
+import { supabase } from "./supabase";
+
 export type Comment = {
   id: string;
   author: string;
@@ -16,56 +18,78 @@ export type Post = {
   likes: number;
   isLiked?: boolean;
   commentList?: Comment[];
-  image?: string; // Base64エンコードされた画像データ
-  video?: string; // Base64エンコードされた動画データ
+  image?: string; 
+  video?: string; 
 };
 
-const STORAGE_KEY = "biasbeat_posts";
+// Supabase から投稿一覧を読み込む（非同期処理）
+export const loadPosts = async (): Promise<Post[]> => {
+  try {
+    // 投稿データを全件取得
+    const { data, error } = await supabase
+      .from('posts')
+      .select('*')
+      .order('id', { ascending: false }); // id（作成時のタイムスタンプ文字列）で新しい順にソート
 
-export const loadPosts = (): Post[] => {
-  if (typeof window === "undefined") return [];
-  const data = localStorage.getItem(STORAGE_KEY);
-  if (data) {
-    try {
-      return JSON.parse(data);
-    } catch (e) {
-      console.error("Failed to parse posts from localStorage", e);
+    if (error) throw error;
+
+    // データがなければ初期データを返す（空でもOKだが、見た目のために）
+    if (!data || data.length === 0) {
       return [];
     }
+
+    // JSONとして保存されたコメントリストをパースして型を整える
+    return data.map(item => ({
+      ...item,
+      commentList: item.commentList ? (typeof item.commentList === 'string' ? JSON.parse(item.commentList) : item.commentList) : [],
+    }));
+  } catch (e) {
+    console.error("Failed to load posts from Supabase", e);
+    return [];
   }
-  
-  // 初期データ
-  return [
-    {
-      id: "1",
-      author: "HanniBear ✨",
-      handle: "@hanni_bear",
-      avatarChar: "H",
-      text: "Seventeen is so coooool!!\n#Seventeen #KPOP",
-      hasImage: true,
-      createdAt: "Just now",
-      likes: 1,
-      isLiked: true,
-      commentList: []
-    },
-    {
-      id: "2",
-      author: "LuviNova",
-      handle: "@luvinova_2h",
-      avatarChar: "L",
-      text: "Our light shines together ✨\nLast night was unforgettable! 💜 #NovaWorldTour #Nova #OT7",
-      hasImage: false,
-      createdAt: "2h",
-      likes: 328,
-      commentList: [
-        { id: "c1", author: "FanA", text: "本当に最高でしたね！", createdAt: "1h" }
-      ]
-    }
-  ];
 };
 
-export const savePosts = (posts: Post[]) => {
-  if (typeof window !== "undefined") {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
+// 新しい投稿を Supabase に追加する
+export const addPost = async (post: Post) => {
+  try {
+    const { error } = await supabase
+      .from('posts')
+      .insert({
+        id: post.id,
+        author: post.author,
+        handle: post.handle,
+        avatarChar: post.avatarChar,
+        text: post.text,
+        hasImage: post.hasImage,
+        createdAt: post.createdAt,
+        likes: post.likes,
+        isLiked: post.isLiked || false,
+        image: post.image || null,
+        video: post.video || null,
+        // commentList は別途テーブルにするのが本来ですが、今回はJSON文字列として保存します
+        commentList: JSON.stringify(post.commentList || [])
+      });
+
+    if (error) throw error;
+  } catch (e) {
+    console.error("Failed to add post to Supabase", e);
+  }
+};
+
+// 投稿を更新する（いいね、コメント用）
+export const updatePost = async (post: Post) => {
+  try {
+    const { error } = await supabase
+      .from('posts')
+      .update({
+        likes: post.likes,
+        isLiked: post.isLiked,
+        commentList: JSON.stringify(post.commentList || [])
+      })
+      .eq('id', post.id);
+
+    if (error) throw error;
+  } catch (e) {
+    console.error("Failed to update post in Supabase", e);
   }
 };
