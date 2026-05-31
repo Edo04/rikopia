@@ -19,10 +19,11 @@ export default function SideNav() {
         コミュニティ
       </Link>
       
-      <button className="nav-item">
+      {/* イベントをリンクに変更 */}
+      <Link href="/event" className={`nav-item ${pathname === "/event" ? "active" : ""}`} style={{textDecoration: "none"}}>
         <img src="/icon-event.jpg" alt="Event" className="custom-icon" />
         イベント
-      </button>
+      </Link>
       
       <button className="nav-item">
         <img src="/collection.png" alt="Collection" className="custom-icon" />

@@ -1,54 +1,82 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Post, Comment, loadPosts, savePosts } from "../lib/storage";
 
 export default function Home() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [inputText, setInputText] = useState("");
-  const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+
+  // コメント入力用
+  const [commentInputs, setCommentInputs] = useState<{ [postId: string]: string }>({});
 
   useEffect(() => {
-    const loaded = loadPosts();
-    setPosts(loaded);
+    setPosts(loadPosts());
   }, []);
 
   const handlePost = () => {
-    if (!inputText.trim()) return;
+    if (!inputText.trim() && !selectedImage && !selectedVideo) return;
+    
     const newPost: Post = {
       id: Date.now().toString(),
-      author: "HanniBear",
-      handle: "hanni_bear",
+      author: "HanniBear ✨",
+      handle: "@hanni_bear",
       avatarChar: "H",
       text: inputText,
-      hasImage: false,
-      createdAt: "1分前",
+      hasImage: !!selectedImage || !!selectedVideo,
+      createdAt: "Just now",
       likes: 0,
-      comments: 0,
-      reposts: 0,
       isLiked: false,
       commentList: [],
+      image: selectedImage || undefined,
+      video: selectedVideo || undefined,
     };
-    const newPosts = [newPost, ...posts];
-    setPosts(newPosts);
-    savePosts(newPosts);
+    
+    const updated = [newPost, ...posts];
+    setPosts(updated);
+    savePosts(updated);
+    
     setInputText("");
+    setSelectedImage(null);
+    setSelectedVideo(null);
   };
 
-  const toggleLike = (postId: string) => {
-    const updatedPosts = posts.map(post => {
-      if (post.id === postId) {
-        const currentlyLiked = post.isLiked;
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'video') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (type === 'image') {
+        setSelectedImage(result);
+        setSelectedVideo(null); // 画像か動画どちらかのみとする
+      } else {
+        setSelectedVideo(result);
+        setSelectedImage(null);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const toggleLike = (id: string) => {
+    const updated = posts.map(p => {
+      if (p.id === id) {
+        const currentlyLiked = p.isLiked || false;
         return {
-          ...post,
+          ...p,
           isLiked: !currentlyLiked,
-          likes: currentlyLiked ? post.likes - 1 : post.likes + 1
+          likes: p.likes + (currentlyLiked ? -1 : 1)
         };
       }
-      return post;
+      return p;
     });
-    setPosts(updatedPosts);
-    savePosts(updatedPosts);
+    setPosts(updated);
+    savePosts(updated);
   };
 
   const handleCommentChange = (postId: string, text: string) => {
@@ -61,88 +89,105 @@ export default function Home() {
 
     const newComment: Comment = {
       id: Date.now().toString(),
-      author: "HanniBear",
+      author: "HanniBear ✨",
       text: text,
-      createdAt: "たった今",
+      createdAt: "Just now"
     };
 
-    const updatedPosts = posts.map(post => {
-      if (post.id === postId) {
-        const currentComments = post.commentList || [];
+    const updated = posts.map(p => {
+      if (p.id === postId) {
         return {
-          ...post,
-          comments: post.comments + 1,
-          commentList: [...currentComments, newComment]
+          ...p,
+          commentList: [...(p.commentList || []), newComment]
         };
       }
-      return post;
+      return p;
     });
-    setPosts(updatedPosts);
-    savePosts(updatedPosts);
+
+    setPosts(updated);
+    savePosts(updated);
     setCommentInputs({ ...commentInputs, [postId]: "" });
+  };
+
+  // ハッシュタグを青(紫)色でレンダリングする関数
+  const renderTextWithHashtags = (text: string) => {
+    // 簡易的なハッシュタグ正規表現: #に続く英数字・日本語などをマッチ
+    const parts = text.split(/(#[^\s#]+)/g);
+    return parts.map((part, index) => {
+      if (part.startsWith('#')) {
+        return <span key={index} style={{ color: "var(--primary)", fontWeight: 600 }}>{part}</span>;
+      }
+      return <React.Fragment key={index}>{part}</React.Fragment>;
+    });
   };
 
   return (
     <>
-      {/* --- 中央フィード --- */}
       <main className="main-feed fade-in">
-        
-        {/* 投稿作成ボックス */}
+        {/* 1. 投稿作成ボックス */}
         <div className="create-post-card">
           <div className="create-post-input-area">
-            <img src="/icon-mypage.png" alt="Avatar" className="post-avatar" style={{width:40, height:40}} />
+            <div className="profile-avatar" style={{width: 44, height: 44, background: "var(--primary)", color: "white", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "20px", fontWeight: 700}}>H</div>
             <input 
               type="text" 
-              placeholder="今の気持ちをシェアしよう.." 
+              placeholder="今の気持ちをシェアしよう！"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") handlePost(); }}
+              onKeyDown={(e) => e.key === "Enter" && handlePost()}
             />
           </div>
+
+          {/* プレビュー表示 */}
+          {selectedImage && (
+            <div style={{ position: "relative", marginBottom: "16px" }}>
+              <img src={selectedImage} alt="Preview" style={{ width: "100%", maxHeight: "300px", objectFit: "cover", borderRadius: "12px" }} />
+              <button onClick={() => setSelectedImage(null)} style={{ position: "absolute", top: "8px", right: "8px", background: "rgba(0,0,0,0.5)", color: "white", border: "none", borderRadius: "50%", width: "28px", height: "28px", cursor: "pointer" }}>✕</button>
+            </div>
+          )}
+          {selectedVideo && (
+            <div style={{ position: "relative", marginBottom: "16px" }}>
+              <video src={selectedVideo} controls style={{ width: "100%", maxHeight: "300px", borderRadius: "12px", background: "black" }} />
+              <button onClick={() => setSelectedVideo(null)} style={{ position: "absolute", top: "8px", right: "8px", background: "rgba(0,0,0,0.5)", color: "white", border: "none", borderRadius: "50%", width: "28px", height: "28px", cursor: "pointer", zIndex: 10 }}>✕</button>
+            </div>
+          )}
+
           <div className="create-post-actions">
-            <button className="post-option-btn">
-              <span style={{fontSize: "18px"}}>🖼️</span> 画像
-            </button>
-            <button className="post-option-btn">
-              <span style={{fontSize: "18px"}}>🎬</span> 動画
-            </button>
-            <button className="post-option-btn">
-              <span style={{fontSize: "18px"}}>📊</span> 投票
-            </button>
-            <button className="post-option-btn">
-              <img src="/icon-event.jpg" alt="Event" className="custom-icon-sm" /> イベント
-            </button>
+            <input type="file" accept="image/*" hidden ref={imageInputRef} onChange={(e) => handleFileSelect(e, 'image')} />
+            <input type="file" accept="video/*" hidden ref={videoInputRef} onChange={(e) => handleFileSelect(e, 'video')} />
             
-            <button 
-              className="btn-primary" 
-              style={{padding: "8px 24px", marginTop: 0, marginLeft: "auto", fontSize: "14px", borderRadius: "20px"}}
-              onClick={handlePost}
-              disabled={!inputText.trim()}
-            >
-              <img src="/icon-post.jpg" alt="Post" className="custom-icon-sm" style={{filter: "brightness(0) invert(1)"}} /> 投稿
+            <button className="post-option-btn" onClick={() => imageInputRef.current?.click()}>
+              🖼 画像
+            </button>
+            <button className="post-option-btn" onClick={() => videoInputRef.current?.click()}>
+              🎬 動画
+            </button>
+            <button className="post-option-btn">
+              📊 投票
+            </button>
+            <button className="post-option-btn">
+              📅 イベント
+            </button>
+            <button className="btn-primary" style={{marginLeft: "auto", padding: "8px 24px", marginTop: 0}} onClick={handlePost}>
+              投稿
             </button>
           </div>
         </div>
 
-        {/* タイムライン */}
+        {/* 2. 投稿一覧 */}
         {posts.map((post) => (
           <div key={post.id} className="post-card">
             <div className="post-header">
               <div className="post-user-info">
-                {post.avatarChar === "H" ? (
-                  <img src="/icon-mypage.png" alt="Avatar" className="post-avatar" />
-                ) : (
-                  <div className="post-avatar" style={{background:"var(--primary-light)", color:"var(--primary)", display:"flex", justifyContent:"center", alignItems:"center", fontSize:"20px", fontWeight:700}}>
-                    {post.avatarChar}
-                  </div>
-                )}
+                <div className="post-avatar" style={{width: 44, height: 44, background: "var(--primary-light)", color: "var(--primary)", display: "flex", justifyContent: "center", alignItems: "center", fontSize: "20px", fontWeight: 700}}>
+                  {post.avatarChar}
+                </div>
                 <div className="post-meta">
                   <div className="post-author-row">
                     <span className="post-author">{post.author}</span>
                     <span className="level-badge" style={{fontSize:"10px", padding:"2px 6px", marginRight:0}}>L3</span>
                     <span className="post-time">{post.createdAt}</span>
                   </div>
-                  <span className="post-time" style={{fontSize: "12px"}}>@{post.handle}</span>
+                  <span style={{fontSize: "13px", color: "var(--text-secondary)"}}>{post.handle}</span>
                 </div>
               </div>
               <button style={{background:"none", border:"none", cursor:"pointer", color:"var(--text-secondary)"}}>
@@ -151,73 +196,72 @@ export default function Home() {
             </div>
             
             <p className="post-text">
-              {post.text.split('\n').map((line, i) => (
-                <React.Fragment key={i}>{line}<br /></React.Fragment>
-              ))}
+              {renderTextWithHashtags(post.text)}
             </p>
-
-            {post.hasImage && (
-              <img src="/icon-event.jpg" alt="Concert" className="post-image" />
+            
+            {/* メディア表示 */}
+            {post.image && (
+              <img src={post.image} alt="Post image" className="post-image" />
             )}
-
+            {post.video && (
+              <video src={post.video} controls className="post-image" style={{ background: "black" }} />
+            )}
+            {/* 初期データの仮画像表示用 */}
+            {!post.image && !post.video && post.hasImage && (
+              <div style={{width: "100%", height: "240px", background: "var(--primary-light)", borderRadius: "12px", marginBottom: "12px", display: "flex", justifyContent: "center", alignItems: "center", color: "var(--primary)", fontWeight: 700}}>
+                NOVA
+              </div>
+            )}
+            
             <div className="post-actions">
               <div className="action-group">
-                <button 
-                  className={`action-btn ${post.isLiked ? 'liked' : ''}`}
-                  onClick={() => toggleLike(post.id)}
-                >
-                  <img src="/icon-like.jpg" alt="Like" className="custom-icon-sm" />
-                  {post.likes >= 1000 ? (post.likes / 1000).toFixed(1) + 'K' : post.likes}
+                <button className={`action-btn ${post.isLiked ? 'liked' : ''}`} onClick={() => toggleLike(post.id)}>
+                  <img src="/icon-like.jpg" alt="Like" className="custom-icon-sm" /> {post.likes}
                 </button>
                 <button className="action-btn">
-                  <img src="/icon-comment.jpg" alt="Comment" className="custom-icon-sm" />
-                  {post.comments}
+                  <img src="/icon-comment.jpg" alt="Comment" className="custom-icon-sm" /> {post.commentList?.length || 0}
                 </button>
                 <button className="action-btn">
-                  <span style={{fontSize: "18px"}}>🔁</span>
-                  {post.reposts}
+                  <img src="/icon-kyouyuu.png" alt="Share" className="custom-icon-sm" style={{filter: "brightness(0) invert(0.4)"}} />
                 </button>
               </div>
               <button className="action-btn">
-                <img src="/icon-hozon.png" alt="Save" className="custom-icon-sm" />
+                <img src="/icon-hozon.png" alt="Save" className="custom-icon-sm" style={{filter: "brightness(0) invert(0.4)"}} />
               </button>
             </div>
 
             {/* コメントセクション */}
-            {post.commentList && post.commentList.length > 0 && (
-              <div className="comments-section">
-                {post.commentList.map(comment => (
-                  <div key={comment.id} className="comment-item">
-                    <img src="/icon-mypage.png" alt="Avatar" className="comment-avatar" />
-                    <div className="comment-content">
-                      <span className="comment-author">{comment.author}</span>
-                      <span className="comment-text">{comment.text}</span>
-                    </div>
+            <div className="comments-section">
+              {post.commentList?.map(comment => (
+                <div key={comment.id} className="comment-item">
+                  <div className="comment-avatar" style={{background: "var(--primary)", color: "white", display: "flex", justifyContent: "center", alignItems: "center", fontWeight: 700, fontSize: "14px"}}>
+                    {comment.author.charAt(0)}
                   </div>
-                ))}
+                  <div style={{flex: 1}}>
+                    <div>
+                      <span className="comment-author">{comment.author}</span>
+                    </div>
+                    <p className="comment-text">{comment.text}</p>
+                  </div>
+                </div>
+              ))}
+              <div className="comment-input-area">
+                <div className="comment-avatar" style={{background: "var(--primary)", color: "white", display: "flex", justifyContent: "center", alignItems: "center", fontWeight: 700, fontSize: "14px"}}>H</div>
+                <input 
+                  type="text" 
+                  placeholder="コメントを追加..." 
+                  value={commentInputs[post.id] || ""}
+                  onChange={(e) => handleCommentChange(post.id, e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleAddComment(post.id)}
+                />
               </div>
-            )}
-            
-            {/* コメント入力 */}
-            <div className="comment-input-area">
-              <img src="/icon-mypage.png" alt="Avatar" className="comment-avatar" style={{width: 28, height: 28}} />
-              <input 
-                type="text" 
-                placeholder="コメントを追加..." 
-                value={commentInputs[post.id] || ""}
-                onChange={(e) => handleCommentChange(post.id, e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleAddComment(post.id);
-                }}
-              />
             </div>
           </div>
         ))}
       </main>
 
-      {/* --- 右ユーティリティパネル --- */}
+      {/* 右パネル */}
       <aside className="right-panel fade-in">
-        
         {/* 急上昇ハッシュタグ */}
         <div className="panel-card">
           <p className="panel-title">急上昇ハッシュタグ</p>
@@ -225,30 +269,38 @@ export default function Home() {
             <div className="trend-item">
               <div className="trend-rank-tag">
                 <span className="trend-rank">1</span>
-                <span className="trend-tag">#NOVA_ConcertBack</span>
+                <div style={{display: "flex", flexDirection: "column"}}>
+                  <span className="trend-tag">#NOVA_ConcertBack</span>
+                  <span className="trend-posts">12.5K posts</span>
+                </div>
               </div>
-              <span className="trend-posts">12.5K posts</span>
             </div>
             <div className="trend-item">
               <div className="trend-rank-tag">
-                <span className="trend-rank">2</span>
-                <span className="trend-tag">#Yuseon_Vlog</span>
+                <span className="trend-rank" style={{color: "var(--text-secondary)"}}>2</span>
+                <div style={{display: "flex", flexDirection: "column"}}>
+                  <span className="trend-tag">#Yuseon_Vlog</span>
+                  <span className="trend-posts">8.2K posts</span>
+                </div>
               </div>
-              <span className="trend-posts">8.2K posts</span>
             </div>
             <div className="trend-item">
               <div className="trend-rank-tag">
-                <span className="trend-rank">3</span>
-                <span className="trend-tag">#NOVA_WORLD_TOUR</span>
+                <span className="trend-rank" style={{color: "var(--text-secondary)"}}>3</span>
+                <div style={{display: "flex", flexDirection: "column"}}>
+                  <span className="trend-tag">#NOVA_WORLD_TOUR</span>
+                  <span className="trend-posts">6.7K posts</span>
+                </div>
               </div>
-              <span className="trend-posts">6.7K posts</span>
             </div>
             <div className="trend-item">
               <div className="trend-rank-tag">
-                <span className="trend-rank">4</span>
-                <span className="trend-tag">#OurStar_NOVA</span>
+                <span className="trend-rank" style={{color: "var(--text-secondary)"}}>4</span>
+                <div style={{display: "flex", flexDirection: "column"}}>
+                  <span className="trend-tag">#OurStar_NOVA</span>
+                  <span className="trend-posts">5.1K posts</span>
+                </div>
               </div>
-              <span className="trend-posts">5.1K posts</span>
             </div>
           </div>
           <a className="panel-more">もっと見る</a>
@@ -258,72 +310,53 @@ export default function Home() {
         <div className="panel-card">
           <p className="panel-title">おすすめのコミュニティ</p>
           <div className="community-item">
-            <div className="community-icon" style={{background: "#7C5CFF"}}>N</div>
+            <div className="community-icon" style={{background: "var(--primary)"}}>N</div>
             <div className="community-info">
               <p className="community-name">NOVA Official</p>
               <p className="community-members">メンバー 128K</p>
             </div>
+            <button className="btn-secondary" style={{padding: "4px 12px", fontSize: "12px"}}>＋ 参加</button>
           </div>
           <div className="community-item">
-            <div className="community-icon" style={{background: "#B2BDFF"}}>Y</div>
+            <div className="community-icon" style={{background: "var(--primary-light)"}}>Y</div>
             <div className="community-info">
               <p className="community-name">Yuseon Dreamers</p>
               <p className="community-members">メンバー 42K</p>
             </div>
+            <button className="btn-secondary" style={{padding: "4px 12px", fontSize: "12px"}}>＋ 参加</button>
           </div>
           <div className="community-item">
-            <div className="community-icon" style={{background: "#FF7DCB"}}>F</div>
+            <div className="community-icon" style={{background: "var(--accent-pink)"}}>F</div>
             <div className="community-info">
               <p className="community-name">NOVA Fan Art</p>
               <p className="community-members">メンバー 35K</p>
             </div>
+            <button className="btn-secondary" style={{padding: "4px 12px", fontSize: "12px"}}>＋ 参加</button>
           </div>
           <a className="panel-more">もっと見る</a>
         </div>
 
         {/* 今後のイベント */}
         <div className="panel-card">
-          <p className="panel-title">今後のイベント</p>
+          <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px"}}>
+            <p className="panel-title" style={{marginBottom: 0}}>今後のイベント</p>
+            <a className="panel-more" style={{marginTop: 0}}>すべて見る</a>
+          </div>
           <div className="event-item">
             <img src="/icon-event.jpg" alt="Event" className="event-thumb" />
             <div className="event-info">
-              <p className="event-title">NOVA WORLD TOUR<br/>in OSAKA</p>
-              <p className="event-date">5.18 (土) 17:00</p>
+              <p className="event-title">NOVA WORLD TOUR 日本公演 (東京ドーム)</p>
+              <p className="event-date">2025.06.01 (Sat) 18:00</p>
             </div>
           </div>
           <div className="event-item">
-            <div className="event-thumb" style={{background: "var(--accent-pink)", display:"flex", alignItems:"center", justifyContent:"center"}}>🎂</div>
+            <div className="event-thumb" style={{background: "var(--accent-pink)"}}></div>
             <div className="event-info">
-              <p className="event-title">Yuseon Birthday Project<br/>2024</p>
-              <p className="event-date">5.24 (金) 00:00</p>
-            </div>
-          </div>
-          <a className="panel-more">もっと見る</a>
-        </div>
-
-        {/* クイック統計 */}
-        <div className="panel-card">
-          <p className="panel-title">クイック統計</p>
-          <div className="stats-grid">
-            <div className="stat-box">
-              <span className="stat-label">フォロー中</span>
-              <span className="stat-value">42</span>
-            </div>
-            <div className="stat-box">
-              <span className="stat-label">投稿数</span>
-              <span className="stat-value">186</span>
-            </div>
-            <div className="stat-box">
-              <span className="stat-label">フォロワー</span>
-              <span className="stat-value">1.2K</span>
-            </div>
-            <div className="stat-box">
-              <span className="stat-label">いいね総数</span>
-              <span className="stat-value">24.8K</span>
+              <p className="event-title">4th Anniversary Live Streaming</p>
+              <p className="event-date">2025.07.15 (Tue) 20:00</p>
             </div>
           </div>
         </div>
-
       </aside>
     </>
   );
