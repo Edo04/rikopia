@@ -19,31 +19,22 @@ export default function SideNav() {
         コミュニティ
       </Link>
       
-      {/* イベントをリンクに変更 */}
       <Link href="/event" className={`nav-item ${pathname === "/event" ? "active" : ""}`} style={{textDecoration: "none"}}>
         <img src="/icon-event.jpg" alt="Event" className="custom-icon" />
         イベント
       </Link>
       
-      <button className="nav-item">
-        <img src="/collection.png" alt="Collection" className="custom-icon" />
-        コレクション
-      </button>
+      {/* コレクションとトレードは一旦削除 */}
       
-      <button className="nav-item">
-        <img src="/trade.png" alt="Trade" className="custom-icon" />
-        トレード
-      </button>
-      
-      <button className="nav-item">
+      <Link href="/notifications" className={`nav-item ${pathname === "/notifications" ? "active" : ""}`} style={{textDecoration: "none"}}>
         <img src="/tuuti.png" alt="Notification" className="custom-icon" />
         通知 <span className="level-badge" style={{marginLeft: "auto", background:"#FF7DCB", color:"white"}}>12</span>
-      </button>
+      </Link>
       
-      <button className="nav-item">
+      <Link href="/mypage" className={`nav-item ${pathname === "/mypage" ? "active" : ""}`} style={{textDecoration: "none"}}>
         <img src="/icon-mypage.png" alt="MyPage" className="custom-icon" />
         マイページ
-      </button>
+      </Link>
       
       <button className="nav-item">
         <span style={{fontSize: "20px", width: "24px", textAlign: "center"}}>⋯</span>
